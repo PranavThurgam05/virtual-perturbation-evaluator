@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Data
+data/raw/
+data/processed/
+*.h5ad
+*.h5
+*.npz
+*.npy
+*.parquet
+*.csv.gz
+
+# Outputs
+outputs/checkpoints/
+outputs/predictions/
+outputs/metrics/
+outputs/figures/
+wandb/
+
+# Models/checkpoints
+*.pt
+*.pth
+*.safetensors
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

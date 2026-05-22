@@ -1,0 +1,12 @@
+raw_h5ad: data/raw/arc/adata_Training.h5ad
+processed_npz: data/processed/perturbation_delta_dataset.npz
+split_json: data/splits/gene_split_seed42.json
+
+control_label: non-targeting
+target_col: target_gene
+
+test_metadata: data/raw/test/test.csv
+prediction_output: outputs/predictions/test_predictions.npz
+
+seed: 42
+val_fraction: 0.2

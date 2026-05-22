@@ -1,0 +1,21 @@
+model_type: transformer
+
+data:
+  processed_npz: data/processed/perturbation_delta_dataset.npz
+  split_json: data/splits/gene_split_seed42.json
+
+training:
+  seed: 42
+  epochs: 200
+  batch_size: 4
+  lr: 0.0005
+  weight_decay: 0.0001
+  patience: 25
+  checkpoint_path: outputs/checkpoints/transformer_best.pt
+  metrics_path: outputs/metrics/transformer_metrics.json
+
+model:
+  hidden_size: 128
+  num_layers: 4
+  num_heads: 4
+  dropout: 0.1

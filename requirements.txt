@@ -1,0 +1,14 @@
+torch
+transformers
+scanpy
+anndata
+huggingface_hub
+numpy
+pandas
+scipy
+scikit-learn
+pyyaml
+tqdm
+safetensors
+psutil
+matplotlib
