@@ -14,6 +14,11 @@ training:
   checkpoint_path: outputs/checkpoints/mamba_best.pt
   metrics_path: outputs/metrics/mamba_metrics.json
 
+wandb:
+  enabled: true
+  project: virtual-perturbation-evaluator
+  run_name: mamba
+
 model:
   hidden_size: 128
   num_layers: 4

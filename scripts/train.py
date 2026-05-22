@@ -5,6 +5,10 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 from vcell.data import PerturbationDeltaDataset, load_processed_npz
 from vcell.metrics import evaluate_delta_predictions
@@ -104,6 +108,8 @@ def main():
 
     cfg = load_yaml(args.config)
     tcfg = cfg["training"]
+    wcfg = cfg.get("wandb", {})
+    use_wandb = bool(wcfg.get("enabled", True))
     set_seed(int(tcfg.get("seed", 42)))
 
     device = get_device()
@@ -146,6 +152,23 @@ def main():
         lr=float(tcfg["lr"]),
         weight_decay=float(tcfg.get("weight_decay", 0.0)),
     )
+
+    wandb_run = None
+    if use_wandb:
+        if wandb is None:
+            raise ImportError(
+                "wandb is enabled in config, but package is not installed. "
+                "Install it with `pip install wandb`."
+            )
+        wandb_run = wandb.init(
+            project=wcfg.get("project", "virtual-perturbation-evaluator"),
+            entity=wcfg.get("entity"),
+            name=wcfg.get("run_name"),
+            tags=wcfg.get("tags"),
+            config=cfg,
+        )
+        wandb.define_metric("epoch")
+        wandb.define_metric("*", step_metric="epoch")
 
     best_val = float("inf")
     best_metrics = None
@@ -197,6 +220,15 @@ def main():
             f"des100={metrics['des_top100_overlap']:.3f}"
         )
 
+        if wandb_run is not None:
+            epoch_log = {
+                "epoch": epoch,
+                "train/loss": train_loss,
+            }
+            for k, v in metrics.items():
+                epoch_log[f"val/{k}"] = float(v)
+            wandb.log(epoch_log)
+
         if val_loss < best_val:
             best_val = val_loss
             best_metrics = metrics
@@ -210,11 +242,22 @@ def main():
                 checkpoint_path,
             )
             print(f"  saved best checkpoint to {checkpoint_path}")
+
+            if wandb_run is not None:
+                wandb.log(
+                    {
+                        "epoch": epoch,
+                        "best/epoch": epoch,
+                        "best/delta_mae": float(best_val),
+                    }
+                )
         else:
             bad_epochs += 1
 
         if bad_epochs >= patience:
             print(f"Early stopping after {epoch} epochs.")
+            if wandb_run is not None:
+                wandb.log({"epoch": epoch, "train/early_stop_epoch": epoch})
             break
 
     elapsed = time.time() - start_time
@@ -231,6 +274,15 @@ def main():
     print(f"Saved metrics to {metrics_path}")
     print("Best metrics:")
     print(best_metrics)
+
+    if wandb_run is not None:
+        wandb_run.summary["training_seconds"] = float(best_metrics["training_seconds"])
+        wandb_run.summary["num_parameters"] = int(best_metrics["num_parameters"])
+        wandb_run.summary["model_type"] = best_metrics["model_type"]
+        for k, v in best_metrics.items():
+            if isinstance(v, (int, float, np.floating, np.integer)):
+                wandb_run.summary[f"best/{k}"] = float(v)
+        wandb.finish()
 
 
 if __name__ == "__main__":

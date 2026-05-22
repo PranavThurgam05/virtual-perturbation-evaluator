@@ -12,3 +12,4 @@ tqdm
 safetensors
 psutil
 matplotlib
+wandb
