@@ -181,6 +181,7 @@ def main():
     start_time = time.time()
 
     for epoch in range(1, int(tcfg["epochs"]) + 1):
+        epoch_start = time.time()
         model.train()
         losses = []
 
@@ -211,19 +212,27 @@ def main():
 
         val_loss = metrics["delta_mae"]
         train_loss = float(np.mean(losses))
+        epoch_seconds = time.time() - epoch_start
+        avg_epoch_seconds = (time.time() - start_time) / epoch
+        epochs_left = int(tcfg["epochs"]) - epoch
+        eta_seconds = max(0.0, avg_epoch_seconds * epochs_left)
 
         print(
             f"epoch {epoch:03d} | "
             f"train_loss={train_loss:.5f} | "
             f"val_delta_mae={metrics['delta_mae']:.5f} | "
             f"pds_top1={metrics['pds_top1']:.3f} | "
-            f"des100={metrics['des_top100_overlap']:.3f}"
+            f"des100={metrics['des_top100_overlap']:.3f} | "
+            f"epoch_s={epoch_seconds:.1f} | "
+            f"eta_m={eta_seconds / 60.0:.1f}"
         )
 
         if wandb_run is not None:
             epoch_log = {
                 "epoch": epoch,
                 "train/loss": train_loss,
+                "train/epoch_seconds": float(epoch_seconds),
+                "train/eta_seconds": float(eta_seconds),
             }
             for k, v in metrics.items():
                 epoch_log[f"val/{k}"] = float(v)
