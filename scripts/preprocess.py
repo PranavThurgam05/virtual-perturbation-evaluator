@@ -7,6 +7,7 @@ from scipy import sparse
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+import pandas as pd
 
 from vcell.utils import load_yaml, save_json, set_seed
 
@@ -76,6 +77,47 @@ def compute_gene_features(control_X, gene_names, n_components=128, max_control_c
     assert features.shape[0] == len(gene_names)
     return features.astype(np.float32)
 
+def apply_qc(adata):
+    """Filters low-quality cells and uninformative genes."""
+    print("Applying Quality Control...")
+    # Identify mitochondrial genes
+    adata.var['mt'] = adata.var_names.str.startswith('MT-')
+    
+    # Calculate QC metrics
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+    
+    # Filter cells and genes (Adjust thresholds based on your specific dataset)
+    sc.pp.filter_cells(adata, min_genes=200)
+    sc.pp.filter_genes(adata, min_cells=3)
+    
+    # Filter out cells with >5% mitochondrial counts
+    adata = adata[adata.obs.pct_counts_mt < 5, :].copy()
+    return adata
+
+def create_pseudobulk(adata, groupby_cols):
+    """Aggregates single-cell counts into pseudobulks by summing them."""
+    print(f"Pseudobulking data by {groupby_cols}...")
+    
+    # Extract counts (use toarray if sparse)
+    counts = adata.X.toarray() if sparse.issparse(adata.X) else np.asarray(adata.X)
+    df = pd.DataFrame(counts, columns=adata.var_names)
+    
+    # Append grouping metadata
+    for col in groupby_cols:
+        if col in adata.obs.columns:
+            df[col] = adata.obs[col].values
+        else:
+            raise ValueError(f"Column '{col}' not found in adata.obs")
+            
+    # Sum counts per group
+    pb_df = df.groupby(groupby_cols).sum()
+    
+    # Reconstruct AnnData
+    pb_adata = sc.AnnData(X=pb_df.values, var=adata.var.copy())
+    pb_adata.obs = pb_df.index.to_frame(index=False)
+    
+    return pb_adata
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -101,9 +143,27 @@ def main():
     print(f"Loaded AnnData shape: {adata.shape}")
     print(f"obs columns: {list(adata.obs.columns)}")
 
+    target_col = cfg.get("target_col", "target_gene")
+    batch_col = cfg.get("batch_col", "batch")
+    cell_type_col = cfg.get("cell_type_col", "cell_type")
+
     if target_col not in adata.obs.columns:
         raise ValueError(f"Missing target column '{target_col}' in adata.obs")
 
+    # 1. Apply Quality Control
+    adata = apply_qc(adata)
+    print(f"Shape after QC: {adata.shape}")
+
+    # 2. Apply Pseudobulking
+    # We group by the target perturbation, batch, and cell type to preserve them
+    groupby_cols = [target_col]
+    if batch_col in adata.obs.columns: groupby_cols.append(batch_col)
+    if cell_type_col in adata.obs.columns: groupby_cols.append(cell_type_col)
+    
+    adata = create_pseudobulk(adata, groupby_cols=groupby_cols)
+    print(f"Shape after Pseudobulking: {adata.shape}")
+
+    # Extract updated labels after pseudobulking
     gene_names = np.asarray(adata.var_names.astype(str))
     target_labels = np.asarray(adata.obs[target_col].astype(str))
 
