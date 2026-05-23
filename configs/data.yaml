@@ -5,6 +5,9 @@ split_json: data/splits/gene_split_seed42.json
 control_label: non-targeting
 target_col: target_gene
 
+batch_col: batch 
+cell_type_col: cell_type
+
 test_metadata: data/raw/test/test.csv
 prediction_output: outputs/predictions/test_predictions.npz
 
