@@ -72,13 +72,13 @@ def main():
     # --- GENERATING VERIFICATION PLOTS ---
     print("\n--- Generating Verification Plots ---")
     
-    # 1. NEW: Save Classic PCA Scatter Plots (PC1 vs PC2)
+    # 1. Save Classic PCA Scatter Plots (PC1 vs PC2)
     print(f"Saving classic PC1 vs PC2 scatter plots to {output_dir}/pca_scatter.png...")
     if color_targets:
         # scanpy saves this automatically as 'pca_scatter.png' when using save="_scatter.png"
         sc.pl.pca(adata, color=color_targets, show=False, save="_scatter.png")
 
-    # 2. NEW: Save PCA Variance Ratio Elbow Plot
+    # 2. Save PCA Variance Ratio Elbow Plot
     print(f"Saving PCA variance ratio (elbow plot) to {output_dir}/pca_variance_ratio.png...")
     sc.pl.pca_variance_ratio(adata, n_pcs=30, log=False, show=False, save=".png")
 
