@@ -14,6 +14,15 @@ class MambaDeltaPredictor(nn.Module):
       + target_indicator_embedding[j]
 
     Output is one predicted perturbation delta per gene.
+
+    Bidirectionality
+    ----------------
+    Mamba is a *causal* scan: gene position j only integrates information from
+    positions < j. But the gene axis here has no meaningful order (it's just
+    ``var_names`` order), so a unidirectional scan blinds each gene to roughly
+    half of the others. With ``bidirectional=True`` we run a second backbone
+    over the reversed sequence and fuse the two hidden states, so every gene can
+    attend to all genes regardless of position.
     """
 
     def __init__(
@@ -25,9 +34,11 @@ class MambaDeltaPredictor(nn.Module):
         num_layers: int = 4,
         state_size: int = 16,
         dropout: float = 0.1,
+        bidirectional: bool = True,
     ):
         super().__init__()
         self.n_genes = n_genes
+        self.bidirectional = bidirectional
 
         self.register_buffer("gene_ids", torch.arange(n_genes, dtype=torch.long))
         self.register_buffer(
@@ -49,9 +60,20 @@ class MambaDeltaPredictor(nn.Module):
             pad_token_id=0,
         )
         self.backbone = MambaModel(config)
+
+        if bidirectional:
+            # Separate backbone for the reverse scan, plus a fusion layer that
+            # maps the concatenated [forward, backward] states back to hidden_size
+            # so the prediction head is unchanged.
+            self.backbone_rev = MambaModel(config)
+            self.fuse = nn.Linear(2 * hidden_size, hidden_size)
+        else:
+            self.backbone_rev = None
+            self.fuse = None
+
         self.head = nn.Linear(hidden_size, 1)
 
-    def forward(self, batch):
+    def _embed(self, batch):
         target_features = batch["target_features"]
         target_gene_idx = batch["target_gene_idx"]
 
@@ -63,7 +85,6 @@ class MambaDeltaPredictor(nn.Module):
 
         gene_emb = self.gene_embedding(gene_ids)
         expr_emb = self.expr_proj(control_mean.unsqueeze(-1))
-
         target_emb = self.target_proj(target_features).unsqueeze(1)
 
         indicator = torch.zeros(batch_size, self.n_genes, device=device)
@@ -71,8 +92,20 @@ class MambaDeltaPredictor(nn.Module):
         indicator_emb = self.indicator_proj(indicator.unsqueeze(-1))
 
         x = gene_emb + expr_emb + target_emb + indicator_emb
-        x = self.dropout(x)
+        return self.dropout(x)
 
-        outputs = self.backbone(inputs_embeds=x)
-        delta = self.head(outputs.last_hidden_state).squeeze(-1)
+    def forward(self, batch):
+        x = self._embed(batch)
+
+        fwd = self.backbone(inputs_embeds=x).last_hidden_state
+
+        if self.bidirectional:
+            x_rev = x.flip(dims=[1])
+            rev = self.backbone_rev(inputs_embeds=x_rev).last_hidden_state
+            rev = rev.flip(dims=[1])  # realign to original gene order
+            h = self.fuse(torch.cat([fwd, rev], dim=-1))
+        else:
+            h = fwd
+
+        delta = self.head(h).squeeze(-1)
         return delta

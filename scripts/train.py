@@ -83,6 +83,7 @@ def build_model(cfg, processed, device):
             num_layers=int(mcfg.get("num_layers", 2)),
             state_size=int(mcfg.get("state_size", 16)),
             dropout=float(mcfg.get("dropout", 0.1)),
+            bidirectional=bool(mcfg.get("bidirectional", True)),
         )
     elif model_type == "transformer":
         model = TransformerDeltaPredictor(
@@ -93,6 +94,10 @@ def build_model(cfg, processed, device):
             num_layers=int(mcfg.get("num_layers", 4)),
             num_heads=int(mcfg.get("num_heads", 4)),
             dropout=float(mcfg.get("dropout", 0.1)),
+            use_gene=bool(mcfg.get("use_gene", True)),
+            use_expr=bool(mcfg.get("use_expr", True)),
+            use_target=bool(mcfg.get("use_target", True)),
+            use_indicator=bool(mcfg.get("use_indicator", True)),
         )
     else:
         raise ValueError(f"Unknown model_type: {model_type!r}")
@@ -100,12 +105,8 @@ def build_model(cfg, processed, device):
     return model.to(device)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
-    args = parser.parse_args()
-
-    cfg  = load_yaml(args.config)
+def run_training(cfg):
+    """Run the full train/eval loop for a config dict. Returns best_metrics."""
     tcfg = cfg["training"]
     wcfg = cfg.get("wandb", {})
 
@@ -177,7 +178,18 @@ def main():
         wandb.define_metric("*", step_metric="epoch")
 
     # ── training state ───────────────────────────────────────────────────────
-    best_val     = float("inf")
+    # Select checkpoints on a discrimination-aware metric, NOT MAE. The
+    # MAE-optimal prediction for held-out genes is the mean delta (a constant),
+    # which scores at chance on PDS/DES. "lower is better" metrics are negated
+    # so selection is always "higher is better".
+    selection_metric = tcfg.get("selection_metric", "pds_norm")
+    lower_is_better  = selection_metric in {"delta_mae", "pseudobulk_mae"}
+
+    def selection_score(m):
+        s = m[selection_metric]
+        return -s if lower_is_better else s
+
+    best_score   = float("-inf")
     best_metrics = None
     patience     = int(tcfg.get("patience", 10))
     bad_epochs   = 0
@@ -219,7 +231,7 @@ def main():
             true_means=true_means,
         )
 
-        val_loss       = metrics["delta_mae"]
+        score          = selection_score(metrics)
         train_loss     = float(np.mean(losses))
         epoch_seconds  = time.time() - epoch_start
         current_lr     = scheduler.get_last_lr()[0]
@@ -233,8 +245,9 @@ def main():
             f"epoch {epoch:03d} | "
             f"train={train_loss:.5f} | "
             f"val_mae={metrics['delta_mae']:.5f} | "
-            f"pds_top1={metrics['pds_top1']:.3f} | "
+            f"pds_norm={metrics['pds_norm']:.3f} | "
             f"des100={metrics['des_top100_overlap']:.3f} | "
+            f"disp={metrics['pred_dispersion_ratio']:.2f} | "
             f"lr={current_lr:.2e} | "
             f"epoch_s={epoch_seconds:.1f} | "
             f"eta_m={eta_seconds / 60.0:.1f}"
@@ -253,8 +266,8 @@ def main():
             wandb_run.log(epoch_log)
 
         # ── checkpoint ────────────────────────────────────────────────────
-        if val_loss < best_val:
-            best_val     = val_loss
+        if score > best_score:
+            best_score   = score
             best_metrics = metrics
             bad_epochs   = 0
             torch.save(
@@ -269,9 +282,9 @@ def main():
 
             if wandb_run is not None:
                 wandb_run.log({
-                    "epoch":           epoch,
-                    "best/epoch":      epoch,
-                    "best/delta_mae":  float(best_val),
+                    "epoch":                     epoch,
+                    "best/epoch":                epoch,
+                    f"best/{selection_metric}":  float(metrics[selection_metric]),
                 })
         else:
             bad_epochs += 1
@@ -313,6 +326,17 @@ def main():
             if isinstance(v, (int, float, np.floating, np.integer)):
                 wandb_run.summary[f"best/{k}"] = float(v)
         wandb.finish()
+
+    return best_metrics
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, required=True)
+    args = parser.parse_args()
+
+    cfg = load_yaml(args.config)
+    run_training(cfg)
 
 
 if __name__ == "__main__":
