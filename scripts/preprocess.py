@@ -242,8 +242,14 @@ def main():
     sc.pp.log1p(adata)
 
     # 3. Highly Variable Genes
+    # YAML does not parse `None` as null (only null/~/Null/NULL), so a config
+    # value of `n_hvg: None` arrives as the string "None". Treat string
+    # null-likes as "disable HVG", and cast a real value to int.
     n_hvg = cfg.get("n_hvg", None)
+    if isinstance(n_hvg, str) and n_hvg.strip().lower() in {"none", "null", "~", ""}:
+        n_hvg = None
     if n_hvg is not None:
+        n_hvg = int(n_hvg)
         print(f"Selecting {n_hvg} highly variable genes...")
         sc.pp.highly_variable_genes(
             adata,
