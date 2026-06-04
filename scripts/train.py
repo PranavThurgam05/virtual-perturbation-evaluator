@@ -44,7 +44,7 @@ def weighted_huber_loss(pred, target):
 @torch.no_grad()
 def predict_all(model, loader, device, control_mean):
     model.eval()
-    pred_deltas, true_deltas, true_means = [], [], []
+    pred_deltas, true_deltas, true_means, sample_indices = [], [], [], []
 
     for batch in loader:
         batch = move_batch(batch, device)
@@ -52,13 +52,15 @@ def predict_all(model, loader, device, control_mean):
         pred_deltas.append(pred.detach().cpu().numpy())
         true_deltas.append(batch["delta"].detach().cpu().numpy())
         true_means.append(batch["true_mean"].detach().cpu().numpy())
+        sample_indices.append(batch["sample_index"].detach().cpu().numpy())
 
     pred_deltas = np.concatenate(pred_deltas, axis=0)
     true_deltas = np.concatenate(true_deltas, axis=0)
     true_means  = np.concatenate(true_means,  axis=0)
+    sample_indices = np.concatenate(sample_indices, axis=0)
     pred_means  = control_mean[None, :] + pred_deltas
 
-    return pred_deltas, true_deltas, pred_means, true_means
+    return pred_deltas, true_deltas, pred_means, true_means, sample_indices
 
 
 def build_model(cfg, processed, device):
@@ -182,11 +184,24 @@ def run_training(cfg):
     # MAE-optimal prediction for held-out genes is the mean delta (a constant),
     # which scores at chance on PDS/DES. "lower is better" metrics are negated
     # so selection is always "higher is better".
+    # Options: pds_norm (default), des_score_norm, delta_cosine (higher better);
+    # delta_mae, pseudobulk_mae (lower better). des_score* require a dataset
+    # preprocessed with DE sets.
     selection_metric = tcfg.get("selection_metric", "pds_norm")
     lower_is_better  = selection_metric in {"delta_mae", "pseudobulk_mae"}
 
     def selection_score(m):
+        if selection_metric not in m:
+            raise KeyError(
+                f"selection_metric={selection_metric!r} is not in the computed "
+                f"metrics. The des_score* metrics need a dataset preprocessed with "
+                f"DE gene sets (re-run preprocess.py). Available: {sorted(m)}"
+            )
         s = m[selection_metric]
+        if not np.isfinite(s):
+            # e.g. des_score_norm is NaN when no val perturbation has a DE set;
+            # never select such an epoch.
+            return float("-inf")
         return -s if lower_is_better else s
 
     best_score   = float("-inf")
@@ -221,14 +236,21 @@ def run_training(cfg):
         scheduler.step()
 
         # ── validate ──────────────────────────────────────────────────────
-        pred_deltas, true_deltas, pred_means, true_means = predict_all(
+        pred_deltas, true_deltas, pred_means, true_means, sample_idx = predict_all(
             model, val_loader, device, processed.control_mean
+        )
+        # Align the precomputed DE sets to the loader's sample order (if present).
+        true_de_sets = (
+            [processed.de_gene_sets[i] for i in sample_idx]
+            if processed.de_gene_sets is not None
+            else None
         )
         metrics = evaluate_delta_predictions(
             pred_deltas=pred_deltas,
             true_deltas=true_deltas,
             pred_means=pred_means,
             true_means=true_means,
+            true_de_sets=true_de_sets,
         )
 
         score          = selection_score(metrics)

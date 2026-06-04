@@ -83,6 +83,78 @@ def compute_gene_features(control_X, gene_names, n_components=128, max_control_c
     return features.astype(np.float32)
 
 
+def compute_de_gene_sets(
+    adata,
+    target_col,
+    control_label,
+    perturbation_genes,
+    gene_names,
+    alpha=0.05,
+    min_abs_lfc=0.0,
+):
+    """
+    Significance-based DE gene set per perturbation (the ground truth the real
+    DES is scored against).
+
+    Runs a Wilcoxon rank-sum test of each perturbation's cells vs the control
+    (non-targeting) cells on the log-normalized expression in ``adata.X``, then
+    keeps genes with FDR-adjusted p < alpha (and |log2FC| >= min_abs_lfc). This
+    needs the per-cell data: significance depends on within-group variance and
+    cell counts, which pseudobulk means discard.
+
+    Returns:
+        de_gene_sets: object ndarray (n_perts,), each an int64 array of gene
+                      indices (into gene_names), aligned to ``perturbation_genes``.
+    """
+    print(f"Computing Wilcoxon DE gene sets (alpha={alpha}, min_abs_lfc={min_abs_lfc})...")
+
+    adata.obs[target_col] = adata.obs[target_col].astype("category")
+    categories = set(adata.obs[target_col].cat.categories)
+    if control_label not in categories:
+        raise ValueError(f"Control label {control_label!r} not present in {target_col}")
+
+    groups = [g for g in perturbation_genes if g in categories]
+    sc.tl.rank_genes_groups(
+        adata,
+        groupby=target_col,
+        groups=groups,
+        reference=control_label,
+        method="wilcoxon",
+        use_raw=False,
+    )
+
+    res = adata.uns["rank_genes_groups"]
+    names, padj, lfc = res["names"], res["pvals_adj"], res["logfoldchanges"]
+
+    gene_to_idx = {g: i for i, g in enumerate(gene_names)}
+    de_sets = []
+    n_sig = []
+    for g in perturbation_genes:
+        if g not in categories:
+            de_sets.append(np.array([], dtype=np.int64))
+            n_sig.append(0)
+            continue
+        gnames = np.asarray(names[g])
+        sig = (np.asarray(padj[g]) < alpha) & (np.abs(np.asarray(lfc[g])) >= min_abs_lfc)
+        idx = np.array(
+            [gene_to_idx[gn] for gn in gnames[sig] if gn in gene_to_idx],
+            dtype=np.int64,
+        )
+        de_sets.append(idx)
+        n_sig.append(int(idx.size))
+
+    n_sig = np.asarray(n_sig)
+    print(
+        f"DE sets: {int((n_sig > 0).sum())}/{len(perturbation_genes)} perturbations "
+        f"have >=1 significant gene; median set size = {int(np.median(n_sig))}, "
+        f"max = {int(n_sig.max()) if n_sig.size else 0}"
+    )
+
+    de_gene_sets = np.empty(len(perturbation_genes), dtype=object)
+    de_gene_sets[:] = de_sets
+    return de_gene_sets
+
+
 def apply_qc(adata, min_genes=200, max_genes=8000, max_pct_mt=5):
     """
     Filters low-quality cells and uninformative genes.
@@ -260,6 +332,21 @@ def main():
         seed=int(cfg.get("seed", 42)),
     )
 
+    # Significance-based DE gene sets (ground truth for the real DES).
+    # Uses log-normalized adata.X and the per-cell data, so it must happen here
+    # while the cells are still in memory.
+    de_alpha       = float(cfg.get("de_alpha", 0.05))
+    de_min_abs_lfc = float(cfg.get("de_min_abs_lfc", 0.0))
+    de_gene_sets = compute_de_gene_sets(
+        adata,
+        target_col=target_col,
+        control_label=control_label,
+        perturbation_genes=perturbation_genes,
+        gene_names=gene_names,
+        alpha=de_alpha,
+        min_abs_lfc=de_min_abs_lfc,
+    )
+
     # Train / val split on perturbation genes
     print("Creating held-out perturbation split...")
     train_genes, val_genes = train_test_split(
@@ -287,6 +374,9 @@ def main():
         control_mean        = control_mean,
         gene_features       = gene_features,
         pert_cell_counts    = pert_cell_counts,
+        de_gene_sets        = de_gene_sets,
+        de_alpha            = np.float32(de_alpha),
+        de_min_abs_lfc      = np.float32(de_min_abs_lfc),
     )
 
     print("Done.")

@@ -16,7 +16,10 @@ Usage:
 
 import argparse
 import copy
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
 
 from train import run_training
 from vcell.utils import load_yaml

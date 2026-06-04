@@ -60,6 +60,14 @@ def main():
 
     pert_cell_counts = rng.integers(50, 500, size=n_perts).astype(np.int64)
 
+    # Fake "significance-based" DE sets: a variable number of top-|delta| genes
+    # per perturbation. Stands in for the Wilcoxon sets the real preprocess.py
+    # produces, so the real des_score path can be exercised end-to-end.
+    de_gene_sets = np.empty(n_perts, dtype=object)
+    for i in range(n_perts):
+        n_p = int(rng.integers(20, 80))
+        de_gene_sets[i] = np.argsort(np.abs(pert_deltas[i]))[-n_p:].astype(np.int64)
+
     out_npz = Path(args.out_npz)
     out_split = Path(args.out_split)
     out_npz.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +83,7 @@ def main():
         control_mean=control_mean,
         gene_features=gene_features,
         pert_cell_counts=pert_cell_counts,
+        de_gene_sets=de_gene_sets,
     )
 
     perm = rng.permutation(n_perts)

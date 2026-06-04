@@ -84,6 +84,50 @@ def simplified_des_topk(pred_deltas, true_deltas, k=100):
     }
 
 
+def des_score(pred_deltas, true_de_sets):
+    """
+    "Real" Differential Expression Score.
+
+    Unlike `simplified_des_topk`, the ground-truth gene set here is the
+    *significance-determined* set of DE genes for each perturbation — computed
+    from the per-cell perturb-seq data with a Wilcoxon test during preprocessing
+    (see scripts/preprocess.py). That set has a variable, biologically
+    meaningful size n_p per perturbation, not a fixed k.
+
+    Because our models emit only a pseudobulk delta (not per-cell predictions we
+    could re-test), we approximate the prediction's DE set as its top-n_p genes
+    by |delta|, matching the true set size. With matched sizes this overlap is
+    simultaneously precision and recall (hence F1) against the true DE set.
+
+    Perturbations with no significant DE genes (n_p == 0) are skipped.
+    Chance level for a perturbation is n_p / n_genes.
+    """
+    n_genes = pred_deltas.shape[1]
+    scores, chance = [], []
+    for pred, true_set in zip(pred_deltas, true_de_sets):
+        true_set = np.asarray(true_set, dtype=np.int64)
+        n = int(true_set.size)
+        if n == 0:
+            continue
+        pred_top = set(np.argsort(np.abs(pred))[-n:].tolist())
+        scores.append(len(pred_top & set(true_set.tolist())) / n)
+        chance.append(n / n_genes)
+    if not scores:
+        return {"des_score": float("nan"),
+                "des_score_chance": float("nan"),
+                "des_score_norm": float("nan")}
+    mean_score = float(np.mean(scores))
+    mean_chance = float(np.mean(chance))
+    # Chance-normalized so 0 = random, 1 = perfect, and it is comparable across
+    # gene-panel sizes (e.g. HVG-filtered vs full panel).
+    norm = (mean_score - mean_chance) / (1.0 - mean_chance) if mean_chance < 1.0 else float("nan")
+    return {
+        "des_score": mean_score,
+        "des_score_chance": mean_chance,
+        "des_score_norm": float(norm),
+    }
+
+
 def prediction_collapse_diagnostic(pred_deltas, true_deltas):
     """
     Detects mean-collapse: a model that ignores perturbation identity and
@@ -112,7 +156,9 @@ def delta_spearman(pred_deltas, true_deltas):
     return float(np.mean(vals)) if vals else float("nan")
 
 
-def evaluate_delta_predictions(pred_deltas, true_deltas, pred_means=None, true_means=None):
+def evaluate_delta_predictions(
+    pred_deltas, true_deltas, pred_means=None, true_means=None, true_de_sets=None
+):
     out = {
         "delta_mae": mae(pred_deltas, true_deltas),
         "delta_cosine": cosine_similarity_mean(pred_deltas, true_deltas),
@@ -123,6 +169,10 @@ def evaluate_delta_predictions(pred_deltas, true_deltas, pred_means=None, true_m
     out.update(simplified_des_topk(pred_deltas, true_deltas, k=100))
     out.update(simplified_des_topk(pred_deltas, true_deltas, k=200))
     out.update(prediction_collapse_diagnostic(pred_deltas, true_deltas))
+
+    # Real, significance-based DES — only when the precomputed DE sets are passed.
+    if true_de_sets is not None:
+        out.update(des_score(pred_deltas, true_de_sets))
 
     if pred_means is not None and true_means is not None:
         out["pseudobulk_mae"] = mae(pred_means, true_means)
