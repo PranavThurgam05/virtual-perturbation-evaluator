@@ -165,7 +165,8 @@ def main():
 
     # 2. Normalize + Log-transform
     print("Normalizing...")
-    sc.pp.normalize_total(adata, target_sum=cfg.get("normalize_total", 1e4))
+    target_sum = float(cfg.get("normalize_total", 1e4))
+    sc.pp.normalize_total(adata, target_sum=target_sum)
     sc.pp.log1p(adata)
 
     # 3. Highly Variable Genes

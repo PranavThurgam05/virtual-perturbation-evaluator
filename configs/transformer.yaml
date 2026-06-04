@@ -6,11 +6,11 @@ data:
 
 training:
   seed: 42
-  epochs: 200
-  batch_size: 4
-  lr: 0.0005
+  epochs: 30
+  batch_size: 16
+  lr: 0.001
   weight_decay: 0.0001
-  patience: 25
+  patience: 10
   checkpoint_path: outputs/checkpoints/transformer_best.pt
   metrics_path: outputs/metrics/transformer_metrics.json
 
@@ -20,7 +20,7 @@ wandb:
   run_name: transformer
 
 model:
-  hidden_size: 128
-  num_layers: 4
+  hidden_size: 64
+  num_layers: 2
   num_heads: 4
   dropout: 0.1
