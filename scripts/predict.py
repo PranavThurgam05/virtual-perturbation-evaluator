@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 
-import _bootstrap  # noqa: F401
 import numpy as np
 import pandas as pd
 import torch

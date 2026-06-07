@@ -5,7 +5,6 @@ Preprocessing pipeline: QC -> normalization -> batch correction -> pseudobulking
 import argparse
 from pathlib import Path
 
-import _bootstrap  # noqa: F401
 import numpy as np
 import scanpy as sc
 from scipy import sparse, issparse

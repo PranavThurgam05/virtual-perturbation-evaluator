@@ -1,6 +1,5 @@
 import os
 
-import _bootstrap  # noqa: F401
 import argparse
 import numpy as np
 import scanpy as sc

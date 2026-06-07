@@ -2,7 +2,6 @@ import argparse
 import tempfile
 from pathlib import Path
 
-import _bootstrap  # noqa: F401
 import numpy as np
 import torch
 

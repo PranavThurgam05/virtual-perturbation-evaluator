@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 
-import _bootstrap  # noqa: F401
 
 from vcell.utils import load_yaml
 
