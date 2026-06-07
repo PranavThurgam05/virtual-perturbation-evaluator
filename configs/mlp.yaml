@@ -15,7 +15,7 @@ training:
   metrics_path: outputs/metrics/mlp_metrics.json
 
 wandb:
-  enabled: true
+  enabled: false
   project: virtual-perturbation-evaluator
   run_name: mlp
 

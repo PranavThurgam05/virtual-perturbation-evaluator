@@ -1,11 +1,6 @@
 import os
-import sys
-from pathlib import Path
 
-root_dir = Path(__file__).resolve().parents[1]
-if str(root_dir / "src") not in sys.path:
-    sys.path.append(str(root_dir / "src"))
-
+import _bootstrap  # noqa: F401
 import argparse
 import numpy as np
 import scanpy as sc
@@ -50,6 +45,7 @@ def main():
     print("Running PCA (computing 30 components)...")
     sc.tl.pca(adata, n_comps=30, use_highly_variable=True)
     pca_coords = adata.obsm["X_pca"]
+    adata.obs["PC1"] = pca_coords[:, 0]
 
     print("\n--- PCA Variance Investigation ---")
 

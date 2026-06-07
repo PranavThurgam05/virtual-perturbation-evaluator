@@ -7,7 +7,7 @@ data:
 training:
   seed: 42
   epochs: 30
-  batch_size: 16
+  batch_size: 1
   lr: 0.001
   weight_decay: 0.0001
   patience: 10
@@ -15,12 +15,12 @@ training:
   metrics_path: outputs/metrics/transformer_metrics.json
 
 wandb:
-  enabled: true
+  enabled: false
   project: virtual-perturbation-evaluator
   run_name: transformer
 
 model:
-  hidden_size: 64
-  num_layers: 2
+  hidden_size: 32
+  num_layers: 1
   num_heads: 4
   dropout: 0.1
