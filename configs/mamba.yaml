@@ -7,7 +7,7 @@ data:
 training:
   seed: 42
   epochs: 30
-  batch_size: 8
+  batch_size: 16
   lr: 0.001
   weight_decay: 0.0001
   patience: 10
@@ -15,7 +15,7 @@ training:
   metrics_path: outputs/metrics/mamba_metrics.json
 
 wandb:
-  enabled: false
+  enabled: true
   project: virtual-perturbation-evaluator
   run_name: mamba
 
