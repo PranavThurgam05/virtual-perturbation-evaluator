@@ -6,11 +6,15 @@ data:
 
 training:
   seed: 42
-  epochs: 30
+  epochs: 50
   batch_size: 16
   lr: 0.001
-  weight_decay: 0.0001
-  patience: 10
+  weight_decay: 0.005
+  patience: 15
+  # Checkpoint/early-stop metric. Higher-is-better: pds_norm (default),
+  # des_score_norm, delta_cosine. Lower-is-better: delta_mae, pseudobulk_mae.
+  # des_score_norm requires a dataset preprocessed with DE sets.
+  selection_metric: des_score_norm
   checkpoint_path: outputs/checkpoints/mamba_best.pt
   metrics_path: outputs/metrics/mamba_metrics.json
 
@@ -20,7 +24,8 @@ wandb:
   run_name: mamba
 
 model:
-  hidden_size: 64
-  num_layers: 2
+  hidden_size: 128
+  num_layers: 4
   state_size: 16
-  dropout: 0.1
+  dropout: 0.3
+  bidirectional: true

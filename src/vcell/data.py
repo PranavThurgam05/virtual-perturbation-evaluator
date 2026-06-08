@@ -17,10 +17,15 @@ class ProcessedPerturbationData:
     control_mean: np.ndarray
     gene_features: np.ndarray
     pert_cell_counts: np.ndarray
+    # Ragged object array: de_gene_sets[i] is an int array of gene indices that
+    # are significantly DE for perturbation i (Wilcoxon, computed in preprocess).
+    # None for datasets produced before this field existed.
+    de_gene_sets: np.ndarray = None
 
 
 def load_processed_npz(path: str) -> ProcessedPerturbationData:
     data = np.load(path, allow_pickle=True)
+    de_gene_sets = data["de_gene_sets"] if "de_gene_sets" in data.files else None
     return ProcessedPerturbationData(
         gene_names=data["gene_names"],
         perturbation_genes=data["perturbation_genes"],
@@ -30,6 +35,7 @@ def load_processed_npz(path: str) -> ProcessedPerturbationData:
         control_mean=data["control_mean"].astype(np.float32),
         gene_features=data["gene_features"].astype(np.float32),
         pert_cell_counts=data["pert_cell_counts"],
+        de_gene_sets=de_gene_sets,
     )
 
 
