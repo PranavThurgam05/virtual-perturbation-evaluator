@@ -19,6 +19,7 @@ outputs/checkpoints/
 outputs/predictions/
 outputs/metrics/
 outputs/figures/
+outputs/cell_eval/
 wandb/
 
 # Models/checkpoints

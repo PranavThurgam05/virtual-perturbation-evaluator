@@ -1,3 +1,10 @@
+"""
+Fast validation metrics for local debugging.
+
+These metrics are intentionally lightweight proxies. Use scripts/evaluate_official.py
+with Arc's cell-eval package for final VCC-style DES/PDS/MAE reporting.
+"""
+
 import numpy as np
 from scipy.spatial.distance import cdist
 from scipy.stats import spearmanr

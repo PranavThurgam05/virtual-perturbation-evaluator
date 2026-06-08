@@ -13,9 +13,7 @@ except ImportError:
 
 from vcell.data import PerturbationDeltaDataset, load_processed_npz
 from vcell.metrics import evaluate_delta_predictions
-from vcell.models.mlp import MLPDeltaPredictor
-from vcell.models.mamba import MambaDeltaPredictor
-from vcell.models.transformer import TransformerDeltaPredictor
+from vcell.models.factory import build_model
 from vcell.utils import (
     count_parameters,
     ensure_parent,
@@ -62,53 +60,12 @@ def predict_all(model, loader, device, control_mean):
 
     return pred_deltas, true_deltas, pred_means, true_means, sample_indices
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, required=True)
+    args = parser.parse_args()
 
-def build_model(cfg, processed, device):
-    model_type = cfg["model_type"]
-    n_genes     = len(processed.gene_names)
-    feature_dim = processed.gene_features.shape[1]
-    mcfg        = cfg["model"]
-
-    if model_type == "mlp":
-        model = MLPDeltaPredictor(
-            feature_dim=feature_dim,
-            n_genes=n_genes,
-            hidden_dim=int(mcfg.get("hidden_dim", 512)),
-            dropout=float(mcfg.get("dropout", 0.15)),
-        )
-    elif model_type == "mamba":
-        model = MambaDeltaPredictor(
-            n_genes=n_genes,
-            feature_dim=feature_dim,
-            control_mean=processed.control_mean,
-            hidden_size=int(mcfg.get("hidden_size", 64)),
-            num_layers=int(mcfg.get("num_layers", 2)),
-            state_size=int(mcfg.get("state_size", 16)),
-            dropout=float(mcfg.get("dropout", 0.1)),
-            bidirectional=bool(mcfg.get("bidirectional", True)),
-        )
-    elif model_type == "transformer":
-        model = TransformerDeltaPredictor(
-            n_genes=n_genes,
-            feature_dim=feature_dim,
-            control_mean=processed.control_mean,
-            hidden_size=int(mcfg.get("hidden_size", 128)),
-            num_layers=int(mcfg.get("num_layers", 4)),
-            num_heads=int(mcfg.get("num_heads", 4)),
-            dropout=float(mcfg.get("dropout", 0.1)),
-            use_gene=bool(mcfg.get("use_gene", True)),
-            use_expr=bool(mcfg.get("use_expr", True)),
-            use_target=bool(mcfg.get("use_target", True)),
-            use_indicator=bool(mcfg.get("use_indicator", True)),
-        )
-    else:
-        raise ValueError(f"Unknown model_type: {model_type!r}")
-
-    return model.to(device)
-
-
-def run_training(cfg):
-    """Run the full train/eval loop for a config dict. Returns best_metrics."""
+    cfg  = load_yaml(args.config)
     tcfg = cfg["training"]
     wcfg = cfg.get("wandb", {})
 
