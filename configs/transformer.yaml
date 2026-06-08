@@ -6,15 +6,15 @@ data:
 
 training:
   seed: 42
-  epochs: 30
+  epochs: 50
   batch_size: 16
   lr: 0.001
-  weight_decay: 0.0001
+  weight_decay: 0.0003
   patience: 30
   # Checkpoint/early-stop metric. Higher-is-better: pds_norm (default),
   # des_score_norm, delta_cosine. Lower-is-better: delta_mae, pseudobulk_mae.
   # des_score_norm requires a dataset preprocessed with DE sets.
-  selection_metric: pds_norm
+  selection_metric: des_score_norm
   checkpoint_path: outputs/checkpoints/transformer_best.pt
   metrics_path: outputs/metrics/transformer_metrics.json
 
@@ -25,6 +25,6 @@ wandb:
 
 model:
   hidden_size: 256
-  num_layers: 6
-  num_heads: 4
-  dropout: 0.1
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.3

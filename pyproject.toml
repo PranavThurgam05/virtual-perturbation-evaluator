@@ -4,7 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "anndata>=0.11.4",
-    "huggingface-hub[cli]>=1.16.1",
+    "causal-conv1d>=1.6.2.post1",
+    "huggingface-hub>=1.16.1",
+    "mamba-ssm>=2.3.2.post1",
     "matplotlib>=3.10.9",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
@@ -25,6 +27,10 @@ dependencies = [
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
+
+[tool.uv.extra-build-dependencies]
+mamba-ssm = ["torch", "packaging", "setuptools", "wheel", "ninja"]
+causal-conv1d = ["torch", "packaging", "setuptools", "wheel", "ninja"]
 
 # Use the CUDA build on Linux, but let macOS/Windows resolve torch from the
 # default PyPI index (the cu128 index has no macOS wheels). The `==2.11.0` pin
